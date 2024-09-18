@@ -1,0 +1,33 @@
+{
+	"FileVersion": 3,
+	"Version": 1,
+	"VersionName": "1.0.0",
+	"SemVersion": "1.0.0",
+	"GameVersion": ">=365306",
+	"FriendlyName": "Enhanced Sorting",
+	"Description": "Rewrites the base-game \"Sort Inventory\" function to respect filtered slots.",
+	"Category": "Modding",
+	"CreatedBy": "Robb, MrHid6",
+	"CreatedByURL": "https://github.com/budak7273/EnhancedSorting",
+	"DocsURL": "",
+	"MarketplaceURL": "",
+	"SupportURL": "",
+	"CanContainContent": true,
+	"IsBetaVersion": false,
+	"IsExperimentalVersion": false,
+	"Installed": false,
+	"Modules": [
+		{
+			"Name": "EnhancedSorting",
+			"Type": "Runtime",
+			"LoadingPhase": "Default"
+		}
+	],
+	"Plugins": [
+		{
+			"Name": "SML",
+			"Enabled": true,
+			"SemVersion": "^3.8.0-dev"
+		}
+	]
+}
