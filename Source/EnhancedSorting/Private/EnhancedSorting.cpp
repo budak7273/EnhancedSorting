@@ -59,6 +59,11 @@ void SetupHooks() {
 	UFGInventoryComponent* DefaultInventoryClass = GetMutableDefault<UFGInventoryComponent>();
 
 	SUBSCRIBE_METHOD_VIRTUAL(UFGInventoryComponent::Server_SortInventory_Implementation, DefaultInventoryClass, [&](auto& Scope, UFGInventoryComponent* Inventory) {
+		if (!Inventory->HasAuthority()) {
+			// Clients should do the vanilla implementation (let the server handle it)
+			Scope(Inventory);
+			return;
+		}
 		// Replace the base game's sorting method
 		Scope.Cancel();
 
