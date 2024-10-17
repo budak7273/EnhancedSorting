@@ -9,68 +9,71 @@
 void FEnhancedSortingModule::ShutdownModule() {
 }
 
-void SortItemAmountsByName(TArray<FItemAmount> inArray, TArray<FItemAmount>& outArray) {
+void SortInventoryStacksByName(TArray<FInventoryStack> inArray, TArray<FInventoryStack>& outArray) {
 
 	TArray<FString> ItemNames;
 
-	bool descending = false;
+	bool Descending = false;
 
-	for (int i = 0; i < inArray.Num(); i++) {
-		auto z = inArray[i];
-		auto ItemName = UFGItemDescriptor::GetItemName(z.ItemClass);
+	for (int originalIndex = 0; originalIndex < inArray.Num(); originalIndex++) {
+		auto stack = inArray[originalIndex];
+		auto ItemName = UFGItemDescriptor::GetItemName(stack.Item.GetItemClass());
 
 		ItemNames.Add(ItemName.ToString());
 	}
 
 	ItemNames.Sort(); // Sort array using built in function (sorts A-Z)
 
-	if (descending == true) {
-		TArray<FString> newArray; // Define "temp" holding array
-		int x = ItemNames.Num() - 1;
+	if (Descending == true) {
+		TArray<FString> holding; // Define "temp" holding array
+		int             index = ItemNames.Num() - 1;
 
-		while (x > -1) {
-			newArray.Add(ItemNames[x]);
+		while (index > -1) {
+			holding.Add(ItemNames[index]);
 			// loop through A-Z sorted array and remove element from back and place it in beginning of "temp" array
-			--x;
+			--index;
 		}
 
-		ItemNames = newArray; // Set reference array to "temp" array order, array is now Z-A
+		ItemNames = holding; // Set reference array to "temp" array order, array is now Z-A
 	}
 
-	TArray<FItemAmount> newItemAmounts;
-	newItemAmounts.AddZeroed(ItemNames.Num());
+	TArray<FInventoryStack> newInventoryStacks;
+	newInventoryStacks.AddZeroed(ItemNames.Num());
 
-	for (int i = 0; i < ItemNames.Num(); i++) {
-		FString ItemName = ItemNames[i];
-		for (int j = 0; j < inArray.Num(); j++) {
-			auto z = inArray[j];
-			auto TempItemName = UFGItemDescriptor::GetItemName(z.ItemClass);
+	for (int outputIndex = 0; outputIndex < ItemNames.Num(); outputIndex++) {
+		FString ItemName = ItemNames[outputIndex];
+		for (int originalIndex = 0; originalIndex < inArray.Num(); originalIndex++) {
+			auto stack = inArray[originalIndex];
+			auto TempItemName = UFGItemDescriptor::GetItemName(stack.Item.GetItemClass());
 
 			if (TempItemName.ToString() == ItemName) {
-				newItemAmounts[i] = z;
+				newInventoryStacks[outputIndex] = stack;
 			}
 		}
 	}
 
-	outArray = newItemAmounts;
+	outArray = newInventoryStacks;
 }
 
 void SetupHooks() {
 	UFGInventoryComponent* DefaultInventoryClass = GetMutableDefault<UFGInventoryComponent>();
 
-	SUBSCRIBE_METHOD_VIRTUAL(UFGInventoryComponent::Server_SortInventory_Implementation, DefaultInventoryClass, [&](auto& Scope, UFGInventoryComponent* Inventory) {
-		if (!Inventory->HasAuthority()) {
-			// Clients should do the vanilla implementation (let the server handle it)
-			Scope(Inventory);
-			return;
-		}
-		// Replace the base game's sorting method
+	SUBSCRIBE_METHOD_VIRTUAL(UFGInventoryComponent::SortInventory, DefaultInventoryClass, [&](auto& Scope, UFGInventoryComponent* Inventory) {
+		// Replace the vanilla function implementation
 		Scope.Cancel();
 
 		if (!IsValid(Inventory)) return;
 
-		// Cache all Inventory items and condense them
-		TArray<FItemAmount> InventoryCachedItemAmounts;
+		// Clients should do the vanilla implementation (let the server handle it)
+		// Yes this is correct, the client is calling Server_SortInventory, that's how CSS did it
+		if (!Inventory->HasAuthority()) {
+			Inventory->Server_SortInventory();
+			return;
+		}
+
+
+		// Cache all Inventory Items and condense them
+		TArray<FInventoryStack> InventoryCachedInventoryStacks;
 
 		for (int i = 0; i < Inventory->GetSizeLinear(); i++) {
 			FInventoryStack outStack;
@@ -80,51 +83,56 @@ void SetupHooks() {
 
 			bool HasExistingCachedItem = false;
 
-			for (auto& cachedItemAmount : InventoryCachedItemAmounts) {
-				if (cachedItemAmount.ItemClass == outStack.Item.GetItemClass()) {
-					cachedItemAmount.Amount += outStack.NumItems;
-					HasExistingCachedItem = true;
+			// condense stack if the item doesn't have an ItemState
+			// If the item has ItemState then skip condense as most likely its an equipment and cant stack anyways.
+			if (!outStack.Item.HasState()) {
+
+				for (auto& cachedInventoryStack : InventoryCachedInventoryStacks) {
+
+					if (cachedInventoryStack.Item.GetItemClass() == outStack.Item.GetItemClass()) {
+						cachedInventoryStack.NumItems += outStack.NumItems;
+						HasExistingCachedItem = true;
+					}
 				}
 			}
 
 			if (!HasExistingCachedItem) {
-				FItemAmount itemAmount = FItemAmount(outStack.Item.GetItemClass(), outStack.NumItems);
-				InventoryCachedItemAmounts.Add(itemAmount);
+				InventoryCachedInventoryStacks.Add(outStack);
 			}
 		}
 
-		// Empty the inventory
+		// Empty Inventory
 		Inventory->Empty();
 
-		//Sort ItemAmounts alphabetically
-		TArray<FItemAmount> SortedItemAmounts;
-		SortItemAmountsByName(InventoryCachedItemAmounts, SortedItemAmounts);
+		//Sort ItemAmounts Alphabetically
+		TArray<FInventoryStack> SortedInventoryStacks;
+		SortInventoryStacksByName(InventoryCachedInventoryStacks, SortedInventoryStacks);
 
 		// Re-add the items
-		for (FItemAmount& ItemAmount : SortedItemAmounts) {
+		for (FInventoryStack& InventoryStack : SortedInventoryStacks) {
 
 			int AttemptsToAddItem = 0;
 
-			while (ItemAmount.Amount > 0) {
+			while (InventoryStack.NumItems > 0) {
 				if (AttemptsToAddItem > 10) {
 					break;
 				}
 
 				for (int i = 0; i < Inventory->GetSizeLinear(); i++) {
 
-					if (!Inventory->IsItemAllowed(ItemAmount.ItemClass, i)) {
+					if (!Inventory->IsItemAllowed(InventoryStack.Item.GetItemClass(), i)) {
 						continue;
 					}
 
 					FInventoryStack outStack;
 					Inventory->GetStackFromIndex(i, outStack);
 
-					int slotSize = Inventory->GetSlotSize(i, ItemAmount.ItemClass);
+					int slotSize = Inventory->GetSlotSize(i, InventoryStack.Item.GetItemClass());
 
 					int RemainingSpace = 0;
 
 					if (outStack.HasItems()) {
-						if (outStack.Item.GetItemClass() != ItemAmount.ItemClass) continue;
+						if (outStack.Item.GetItemClass() != InventoryStack.Item.GetItemClass()) continue;
 						RemainingSpace = slotSize - outStack.NumItems;
 					} else {
 						RemainingSpace = slotSize;
@@ -132,7 +140,7 @@ void SetupHooks() {
 
 					if (RemainingSpace <= 0) continue;
 
-					int AmountToAdd = ItemAmount.Amount;
+					int AmountToAdd = InventoryStack.NumItems;
 
 					if (AmountToAdd > RemainingSpace) {
 						AmountToAdd = RemainingSpace;
@@ -140,24 +148,25 @@ void SetupHooks() {
 
 					FInventoryStack itemStack;
 					itemStack.NumItems = AmountToAdd;
-					itemStack.Item = FInventoryItem(ItemAmount.ItemClass);
+					itemStack.Item = FInventoryItem(InventoryStack.Item.GetItemClass());
 					Inventory->AddStackToIndex(i, itemStack);
 
-					ItemAmount.Amount -= AmountToAdd;
+					InventoryStack.NumItems -= AmountToAdd;
 
-					if (ItemAmount.Amount <= 0) {
+					if (InventoryStack.NumItems <= 0) {
 						break;
 					}
 				}
 
-				if (ItemAmount.Amount <= 0) {
+				if (InventoryStack.NumItems <= 0) {
 					break;
 				}
 				AttemptsToAddItem++;
 			}
 		}
-		});
 
+		Inventory->MarkInventoryContentsDirty();
+	});
 }
 
 void FEnhancedSortingModule::StartupModule() {
