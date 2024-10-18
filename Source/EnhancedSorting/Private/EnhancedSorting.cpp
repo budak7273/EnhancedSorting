@@ -71,13 +71,11 @@ void SetupHooks() {
 			return;
 		}
 
-
 		// Cache all Inventory Items and condense them
 		TArray<FInventoryStack> InventoryCachedInventoryStacks;
-
-		for (int i = 0; i < Inventory->GetSizeLinear(); i++) {
+		for (int inventorySlotIndex = 0; inventorySlotIndex < Inventory->GetSizeLinear(); inventorySlotIndex++) {
 			FInventoryStack outStack;
-			Inventory->GetStackFromIndex(i, outStack);
+			Inventory->GetStackFromIndex(inventorySlotIndex, outStack);
 
 			if (!outStack.HasItems()) continue;
 
@@ -101,7 +99,7 @@ void SetupHooks() {
 			}
 		}
 
-		// Empty Inventory
+		// Empty Inventory (the items are held in InventoryCachedInventoryStacks)
 		Inventory->Empty();
 
 		//Sort ItemAmounts Alphabetically
@@ -110,24 +108,24 @@ void SetupHooks() {
 
 		// Re-add the items
 		for (FInventoryStack& InventoryStack : SortedInventoryStacks) {
-
 			int AttemptsToAddItem = 0;
 
 			while (InventoryStack.NumItems > 0) {
 				if (AttemptsToAddItem > 10) {
+					// TODO how to handle this case cleanly?
 					break;
 				}
 
-				for (int i = 0; i < Inventory->GetSizeLinear(); i++) {
+				for (int inventorySlotIndex = 0; inventorySlotIndex < Inventory->GetSizeLinear(); inventorySlotIndex++) {
 
-					if (!Inventory->IsItemAllowed(InventoryStack.Item.GetItemClass(), i)) {
+					if (!Inventory->IsItemAllowed(InventoryStack.Item.GetItemClass(), inventorySlotIndex)) {
 						continue;
 					}
 
 					FInventoryStack outStack;
-					Inventory->GetStackFromIndex(i, outStack);
+					Inventory->GetStackFromIndex(inventorySlotIndex, outStack);
 
-					int slotSize = Inventory->GetSlotSize(i, InventoryStack.Item.GetItemClass());
+					int slotSize = Inventory->GetSlotSize(inventorySlotIndex, InventoryStack.Item.GetItemClass());
 
 					int RemainingSpace = 0;
 
@@ -148,8 +146,8 @@ void SetupHooks() {
 
 					FInventoryStack itemStack;
 					itemStack.NumItems = AmountToAdd;
-					itemStack.Item = FInventoryItem(InventoryStack.Item.GetItemClass());
-					Inventory->AddStackToIndex(i, itemStack);
+					itemStack.Item = InventoryStack.Item; // Important for persisting item state
+					Inventory->AddStackToIndex(inventorySlotIndex, itemStack);
 
 					InventoryStack.NumItems -= AmountToAdd;
 
