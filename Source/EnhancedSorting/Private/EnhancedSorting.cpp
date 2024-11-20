@@ -48,6 +48,8 @@ void SortInventoryStacksByName(TArray<FInventoryStack> inArray, TArray<FInventor
 
 			if (TempItemName.ToString() == ItemName) {
 				newInventoryStacks[outputIndex] = stack;
+				inArray.RemoveAt(originalIndex);
+				break;
 			}
 		}
 	}
