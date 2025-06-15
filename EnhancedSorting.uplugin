@@ -1,8 +1,8 @@
 {
 	"FileVersion": 3,
 	"Version": 1,
-	"VersionName": "1.0.2",
-	"SemVersion": "1.0.2",
+	"VersionName": "1.0.3",
+	"SemVersion": "1.0.3",
 	"GameVersion": ">=416835",
 	"FriendlyName": "Enhanced Sorting",
 	"Description": "Rewrites the base-game \"Sort Inventory\" function to respect filtered slots.",
